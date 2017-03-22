@@ -53,22 +53,21 @@
       return direction;
     };
 
-    this.showPopunder = function() {
+    this.showPopunder = function(e) {
       self.popunder = self.popunder || document.getElementById('selectionSharerPopunder');
 
-      var sel = window.getSelection();
-      var selection = self.getSelectionText(sel);
+      $('#selectionSharerPopunder .close').on('click', function(e) {
+        self.hidePopunder();
+      });
 
-      if(sel.isCollapsed || selection.length < 10 || !selection.match(/ /))
-        return self.hidePopunder();
+      var selection = $(e.target).text();
 
       if(self.popunder.classList.contains("fixed")) {
           self.popunder.style.bottom = 0;
           return self.popunder.style.bottom;
       }
 
-      var range = sel.getRangeAt(0);
-      var node = range.endContainer.parentNode; // The <p> where the selection ends
+      var node = e.target; // The <p> where the selection ends
 
       // If the popunder is currently displayed
       if(self.popunder.classList.contains('show')) {
@@ -140,44 +139,40 @@
 
     this.show = function(e) {
       setTimeout(function() {
-        var sel = window.getSelection();
-        var selection = self.getSelectionText(sel);
-        if(!sel.isCollapsed && selection && selection.length>10 && selection.match(/ /)) {
-          var range = sel.getRangeAt(0);
-          var topOffset = range.getBoundingClientRect().top - 5;
+        var selection = $(e.target).text();
+        $(e.target).addClass('hover');
+        if(selection) {
+          // var range = sel.getRangeAt(0);
+          var topOffset = e.target.getBoundingClientRect().top - 10;
           var top = topOffset + self.getPosition().y - self.$popover.height();
           var left = 0;
           if(e) {
             left = e.pageX;
           }
           else {
-            var obj = sel.anchorNode.parentNode;
+            var obj = e.target;
             left += obj.offsetWidth / 2;
             do {
               left += obj.offsetLeft;
             }
             while(obj = obj.offsetParent);
           }
-          switch(self.selectionDirection(sel)) {
-            case 'forward':
-              left -= self.$popover.width();
-              break;
-            case 'backward':
-              left += self.$popover.width();
-              break;
-            default:
-              return;
-          }
-          self.$popover.removeClass("anim").css("top", top+10).css("left", left).show();
+          self.$popover.removeClass("anim").css("top", top).css("left", left).show();
           setTimeout(function() {
             self.$popover.addClass("anim").css("top", top);
           }, 0);
+          self.$closeBlock.show();
+          $('.closeBlock').on('click', function() {
+            self.hide(e);
+          });
         }
       }, 10);
     };
 
     this.hide = function(e) {
+      $(e.target).removeClass('hover');
       self.$popover.hide();
+      self.$closeBlock.hide();
     };
 
     this.smart_truncate = function(str, n){
@@ -234,7 +229,7 @@
       var text = self.htmlSelection.replace(/<p[^>]*>/ig,'\n').replace(/<\/p>|  /ig,'').trim();
 
       var url = 'https://www.facebook.com/dialog/feed?' +
-                'app_id='+self.appId +
+                'app_id='+self.x +
                 '&display=popup'+
                 '&caption='+encodeURIComponent(text)+
                 '&link='+encodeURIComponent(self.url2share)+
@@ -258,6 +253,8 @@
     };
 
     this.render = function() {
+      var closeBlockHTML = '<div class="closeBlock"></div>';
+
       var popoverHTML =  '<div class="selectionSharer" id="selectionSharerPopover" style="position:absolute;">'
                        + '  <div id="selectionSharerPopover-inner">'
                        + '    <ul>'
@@ -271,6 +268,7 @@
 
       var popunderHTML = '<div id="selectionSharerPopunder" class="selectionSharer">'
                        + '  <div id="selectionSharerPopunder-inner">'
+                       + '    <div class="close">&times;</div>'
                        + '    <label>Share this selection</label>'
                        + '    <ul>'
                        + '      <li><a class="action tweet" href="" title="Share this selection on Twitter" target="_blank">Tweet</a></li>'
@@ -280,10 +278,12 @@
                        + '  </div>'
                        + '</div>';
       self.$popover = $(popoverHTML);
+      self.$closeBlock = $(closeBlockHTML);
       self.$popover.find('a.tweet').click(self.shareTwitter);
       self.$popover.find('a.facebook').click(self.shareFacebook);
       self.$popover.find('a.email').click(self.shareEmail);
 
+      $('body').append(self.$closeBlock);
       $('body').append(self.$popover);
 
       self.$popunder = $(popunderHTML);
@@ -300,17 +300,25 @@
     this.setElements = function(elements) {
       if(typeof elements == 'string') elements = $(elements);
       self.$elements = elements instanceof $ ? elements : $(elements);
-      self.$elements.mouseup(self.show).mousedown(self.hide).addClass("selectionShareable");
 
-      self.$elements.bind('touchstart', function(e) {
-        self.isMobile = true;
+      self.$elements.on('click', function(e) {
+        self.$elements.toggleClass("selectionShareable");
+
+        self.textSelection = $(e.target).text();
+
+        if (document.body.offsetWidth < 768) {
+          self.isMobile = true;
+        }
+        
+        if (!self.isMobile) self.show(e);
+        self.selectionChanged(e);
       });
-
-      document.onselectionchange = self.selectionChanged;
     };
 
     this.selectionChanged = function(e) {
-      if(!self.isMobile) return;
+      if(!self.isMobile) {
+        return;
+      }
 
       if(self.lastSelectionChanged) {
         clearTimeout(self.lastSelectionChanged);
